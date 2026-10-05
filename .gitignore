@@ -9,3 +9,4 @@ backend/tests/uploads/
 node_modules/
 dist/
 .venv/
+.vite/
