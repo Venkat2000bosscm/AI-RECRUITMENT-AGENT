@@ -1,0 +1,19 @@
+Arjun Nair
+arjun.nair@example.com | +91 95555 66677
+Location: Kochi
+Date of Birth: 12/03/1996
+Marital Status: Single
+
+Summary
+Software engineer with 3 years of experience in Python, Flask and PostgreSQL, keen to grow into distributed backend systems.
+
+Experience
+Software Engineer, HealthTrack (2021 - Present)
+- Built Flask REST APIs and background workers with Redis queues
+- PostgreSQL schema design; Docker-based local environments; pytest unit testing
+- Exposure to AWS S3 and Lambda
+
+Education
+B.Tech Electronics, CUSAT
+
+Skills: Python, Flask, PostgreSQL, Redis, Docker, AWS, Git, Testing

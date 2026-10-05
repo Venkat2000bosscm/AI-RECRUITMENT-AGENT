@@ -1,0 +1,21 @@
+Ananya Sharma
+Email: ananya.sharma@example.com | Phone: +91 98765 43210
+Location: Bengaluru
+
+Summary
+Senior backend engineer with 7 years of experience building scalable Python services and REST APIs.
+
+Experience
+Senior Software Engineer, FinStack (2020 - Present)
+- Designed FastAPI microservices handling 20k requests/sec on AWS (EC2, Lambda, S3)
+- Migrated monolith to Docker + Kubernetes; set up CI/CD with GitHub Actions
+- Built event pipelines with Kafka and Redis caching; PostgreSQL performance tuning
+- Mentored 4 engineers and led system design reviews
+
+Software Engineer, CodeCraft (2017 - 2020)
+- Built Django and Flask applications, REST APIs and unit testing with pytest
+
+Education
+B.Tech in Computer Science, NIT Trichy
+
+Skills: Python, FastAPI, Django, PostgreSQL, Redis, Kafka, AWS, Docker, Kubernetes, CI/CD, Git, System Design

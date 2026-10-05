@@ -1,0 +1,19 @@
+Karthik Reddy
+karthik.reddy@example.com  +91 90000 11122
+Location: Pune
+
+Professional Summary
+Platform / backend engineer with 9 years of experience across Python, Go and cloud infrastructure.
+
+Experience
+Staff Engineer, CloudNine (2018 - Present)
+- Architected distributed systems in Python (FastAPI) and Go on AWS and Kubernetes
+- Owned Terraform infrastructure-as-code and CI/CD pipelines (Jenkins, GitHub Actions)
+- PostgreSQL, Redis and Kafka at scale; led a team of 8 (leadership, mentoring)
+Senior Engineer, DataPipe (2015 - 2018)
+- Built Spark and Airflow data pipelines in Python
+
+Education
+M.Tech Computer Science, IIT Bombay
+
+Skills: Python, Go, FastAPI, AWS, Kubernetes, Docker, Terraform, PostgreSQL, Redis, Kafka, CI/CD, System Design
