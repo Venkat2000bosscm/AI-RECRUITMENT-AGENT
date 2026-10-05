@@ -1,0 +1,18 @@
+Rahul Verma
+rahul.verma@example.com  +91 99887 66554
+Location: Hyderabad
+
+Profile
+Backend developer with 5 years of experience in Python and Django.
+
+Work History
+Backend Developer, ShopKart (2019 - 2024)
+- Developed Django REST APIs for an e-commerce platform serving 2M users
+- Wrote SQL queries and optimized MySQL and PostgreSQL databases
+- Containerized services with Docker; deployed on GCP
+- Practised Agile / Scrum delivery
+
+Education
+B.E. Information Technology, Osmania University
+
+Skills: Python, Django, REST, MySQL, PostgreSQL, Docker, GCP, Git, Agile

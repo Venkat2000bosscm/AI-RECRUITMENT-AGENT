@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+*.db
+uploads/
+backend/tests/uploads/
+.env
+node_modules/
+dist/
+.venv/
+.vite/

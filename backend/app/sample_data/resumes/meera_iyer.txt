@@ -1,0 +1,17 @@
+Meera Iyer
+meera.iyer@example.com | +91 91234 56789
+Location: Chennai
+
+Summary
+Full-stack engineer with 4 years of experience in JavaScript, React and Node.js, with some Python scripting.
+
+Experience
+Software Engineer, WebWorks (2020 - Present)
+- Built React and TypeScript front-ends and Node.js APIs
+- Wrote Python automation scripts for data cleanup
+- Used MongoDB and Redis; deployed with Docker on AWS
+
+Education
+B.Sc Computer Science, Madras University
+
+Skills: JavaScript, TypeScript, React, Node.js, MongoDB, Redis, Docker, AWS, Python, Git

@@ -1,0 +1,16 @@
+Sneha Patel
+sneha.patel@example.com | +91 93333 44455
+Location: Ahmedabad
+
+Summary
+Data analyst with 3 years of experience in SQL, Excel, Power BI and Python (Pandas).
+
+Experience
+Data Analyst, RetailIQ (2021 - Present)
+- Built Power BI and Tableau dashboards for sales and inventory
+- Data analysis with SQL, Pandas and NumPy; Excel automation
+
+Education
+B.Com, Gujarat University; Certificate in Data Analytics
+
+Skills: SQL, Excel, Power BI, Tableau, Python, Pandas, NumPy, Data Analysis

@@ -1,0 +1,18 @@
+Fatima Khan
+fatima.khan@example.com | +91 97777 88899
+Location: Bengaluru
+
+Summary
+Backend engineer with 6 years of experience in Java, Spring Boot and microservices, plus Python for tooling.
+
+Experience
+Senior Engineer, PayFlow (2019 - Present)
+- Built Spring Boot microservices with Kafka and PostgreSQL on Kubernetes
+- Wrote Python tooling and FastAPI internal services; CI/CD with Jenkins
+Engineer, TeleSoft (2017 - 2019)
+- Java REST APIs, MySQL
+
+Education
+M.Sc Computer Science, Christ University
+
+Skills: Java, Spring Boot, Microservices, Kafka, PostgreSQL, Kubernetes, Docker, Python, FastAPI, CI/CD, AWS
