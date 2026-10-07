@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from ..config import settings
-from ..models import Candidate, Job
+from ..models import Candidate, Job, utcnow
 from .guardrails import redact_resume
 from .parsing import canonical_skill, parse_resume
 
@@ -95,12 +95,14 @@ def screen(job: Job, resume_text: str) -> ScreeningResult:
     sim = text_similarity(clean_text, job_profile_text(job))
     sim_score = min(1.0, sim / 0.35)  # cosine of resumes vs JD rarely exceeds ~0.35
 
-    weights = {"required_skills": 0.5, "preferred_skills": 0.15, "experience": 0.2, "similarity": 0.15}
+    weights = dict(settings.score_weights)
     components = {"required_skills": req_score, "experience": exp_score, "similarity": sim_score}
     if pref_score is None:
-        weights["required_skills"] += weights.pop("preferred_skills")
+        weights["required_skills"] += weights.pop("preferred_skills", 0.0)
     else:
         components["preferred_skills"] = pref_score
+    applicable_total = sum(weights.values())
+    weights = {key: value / applicable_total for key, value in weights.items()}
     score = sum(weights[k] * components[k] for k in weights)
 
     flags: list[str] = []
@@ -134,6 +136,7 @@ def screen(job: Job, resume_text: str) -> ScreeningResult:
 
     breakdown = {k: round(v, 3) for k, v in components.items()}
     breakdown["weights"] = weights
+    breakdown["contributions"] = {key: round(weights[key] * components[key], 3) for key in weights}
     return ScreeningResult(
         parsed=parsed,
         score=round(score, 3),
@@ -154,7 +157,7 @@ def application_strategy(job: Job, application_count: int, now: datetime | None 
     """Adaptive strategy: recommend changes when application volume is low after publishing."""
     if job.status != "published" or job.published_at is None:
         return None
-    now = now or datetime.utcnow()
+    now = now or utcnow()
     days_live = (now - job.published_at).total_seconds() / 86400
     target = settings.low_application_threshold
     if application_count >= target:

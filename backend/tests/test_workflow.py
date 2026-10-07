@@ -34,7 +34,7 @@ def test_protected_criteria_rejected(client):
 
 
 def test_rbac(client):
-    assert client.post("/api/jobs", json={"title": "X"}, headers=VIEWER).status_code == 403
+    assert client.post("/api/jobs", json={"title": "Valid title"}, headers=VIEWER).status_code == 403
 
 
 def test_full_pipeline_to_onboarding(client):

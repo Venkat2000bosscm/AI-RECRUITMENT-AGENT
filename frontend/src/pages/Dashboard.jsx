@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api.js";
 import ApprovalCard from "../components/ApprovalCard.jsx";
-import { Badge, Stat } from "../components/ui.jsx";
+import { Badge, LoadError, Stat } from "../components/ui.jsx";
 import { CATEGORY_LABEL, pretty } from "../util.js";
 
 const FUNNEL = ["applied", "screened", "shortlisted", "interview_scheduled", "interviewed", "selected", "offered", "hired"];
@@ -11,14 +11,31 @@ export default function Dashboard() {
   const [s, setS] = useState(null);
   const [jobs, setJobs] = useState([]);
   const [approvals, setApprovals] = useState([]);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
 
-  const load = () => {
-    api.get("/analytics/summary").then(setS);
-    api.get("/jobs").then(setJobs);
-    api.get("/approvals?status=pending").then(setApprovals);
+  const load = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const [summary, requisitions, pending] = await Promise.all([
+        api.get("/analytics/summary"),
+        api.get("/jobs"),
+        api.get("/approvals?status=pending"),
+      ]);
+      setS(summary);
+      setJobs(requisitions);
+      setApprovals(pending);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
   };
-  useEffect(load, []);
-  if (!s) return <p>Loading…</p>;
+  useEffect(() => { load(); }, []);
+  if (!s && loading) return <p role="status">Loading dashboard…</p>;
+  if (!s && error) return <LoadError error={`Couldn’t load dashboard analytics: ${error}`} onRetry={load} />;
+  if (!s) return null;
 
   const screened = s.candidates.screened || 1;
   const maxFunnel = Math.max(1, ...FUNNEL.map((k) => s.pipeline[k] || 0));
@@ -26,6 +43,7 @@ export default function Dashboard() {
   return (
     <div>
       <h1>Recruitment Dashboard</h1>
+      {error && <LoadError error={`Some dashboard data could not be refreshed: ${error}`} onRetry={load} />}
       <div className="grid stats">
         <Stat label="Open requisitions" value={s.jobs.published} hint={`${s.jobs.draft} draft`} />
         <Stat label="Candidates screened" value={`${s.candidates.screened}/${s.candidates.total}`} />

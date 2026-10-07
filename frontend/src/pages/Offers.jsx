@@ -1,17 +1,31 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api.js";
-import { Badge } from "../components/ui.jsx";
+import { Badge, LoadError } from "../components/ui.jsx";
 import { fmtDate, fmtMoney } from "../util.js";
 
 export default function Offers() {
   const [items, setItems] = useState([]);
-  useEffect(() => {
-    api.get("/offers").then(setItems);
-  }, []);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const load = async () => {
+    setLoading(true);
+    try {
+      setItems(await api.get("/offers"));
+      setError("");
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => { load(); }, []);
   return (
     <div>
       <h1>Offers & onboarding</h1>
+      {error && <LoadError error={`Couldn’t load offers: ${error}`} onRetry={load} />}
+      {loading && <p role="status">Loading offers…</p>}
+      {!loading && !error && <>
       <div className="card">
         <table className="table">
           <thead>
@@ -45,6 +59,7 @@ export default function Offers() {
         </table>
         {items.length === 0 && <p className="muted">No offers yet.</p>}
       </div>
+      </>}
     </div>
   );
 }

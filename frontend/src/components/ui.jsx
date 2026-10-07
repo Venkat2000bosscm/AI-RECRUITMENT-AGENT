@@ -46,6 +46,15 @@ export function ErrorBox({ error }) {
   return error ? <div className="error">{error}</div> : null;
 }
 
+export function LoadError({ error, onRetry }) {
+  return (
+    <div className="card" role="alert">
+      <div className="error">{error || "Unable to load this page."}</div>
+      <button className="btn" onClick={onRetry}>Retry</button>
+    </div>
+  );
+}
+
 export function Chips({ items, kind = "" }) {
   if (!items?.length) return <span className="muted">none</span>;
   return (

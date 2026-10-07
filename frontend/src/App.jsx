@@ -9,10 +9,12 @@ import Approvals from "./pages/Approvals.jsx";
 import Interviews from "./pages/Interviews.jsx";
 import Offers from "./pages/Offers.jsx";
 import Activity from "./pages/Activity.jsx";
+import Pipeline from "./pages/Pipeline.jsx";
 
 const NAV = [
   ["/", "Dashboard"],
   ["/jobs", "Requisitions"],
+  ["/pipeline", "Candidate pipeline"],
   ["/approvals", "Approvals"],
   ["/interviews", "Interviews"],
   ["/offers", "Offers & Onboarding"],
@@ -97,12 +99,14 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/jobs" element={<Jobs />} />
+          <Route path="/pipeline" element={<Pipeline />} />
           <Route path="/jobs/:id" element={<JobDetail onChange={refreshMeta} />} />
           <Route path="/candidates/:id" element={<CandidateDetail onChange={refreshMeta} />} />
           <Route path="/approvals" element={<Approvals onChange={refreshMeta} />} />
           <Route path="/interviews" element={<Interviews />} />
           <Route path="/offers" element={<Offers />} />
           <Route path="/activity" element={<Activity />} />
+          <Route path="*" element={<div><h1>Page not found</h1><p className="muted">This page doesn’t exist or may have moved.</p><NavLink to="/">Return to dashboard</NavLink></div>} />
         </Routes>
       </main>
     </div>

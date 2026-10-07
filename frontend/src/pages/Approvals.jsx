@@ -1,16 +1,26 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
 import ApprovalCard from "../components/ApprovalCard.jsx";
-import { Tabs } from "../components/ui.jsx";
+import { LoadError, Tabs } from "../components/ui.jsx";
 
 export default function Approvals({ onChange }) {
   const [status, setStatus] = useState("pending");
   const [items, setItems] = useState([]);
-  const load = () => {
-    api.get(`/approvals?status=${status}`).then(setItems);
-    onChange?.();
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const load = async () => {
+    setLoading(true);
+    try {
+      setItems(await api.get(`/approvals?status=${status}`));
+      setError("");
+      onChange?.();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
   };
-  useEffect(load, [status]);
+  useEffect(() => { load(); }, [status]);
   return (
     <div>
       <h1>Human approvals</h1>
@@ -23,8 +33,10 @@ export default function Approvals({ onChange }) {
         onChange={setStatus}
         tabs={["pending", "approved", "rejected", "all"].map((s) => ({ id: s, label: s[0].toUpperCase() + s.slice(1) }))}
       />
-      {items.length === 0 && <p className="muted">Nothing here.</p>}
-      {items.map((a) => (
+      {error && <LoadError error={`Couldn’t load approvals: ${error}`} onRetry={load} />}
+      {loading && <p role="status">Loading approvals…</p>}
+      {!loading && !error && items.length === 0 && <p className="muted">Nothing here.</p>}
+      {!loading && !error && items.map((a) => (
         <ApprovalCard key={a.id} approval={a} onDone={load} />
       ))}
     </div>

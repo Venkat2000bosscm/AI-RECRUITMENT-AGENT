@@ -3,7 +3,7 @@
 High-impact actions never execute directly: they create an Approval and only run when a human approves.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -13,6 +13,7 @@ from ..models import Approval, Candidate, Interview, Interviewer, Job, Offer, On
 from . import decision, llm
 from .audit import log
 from .integrations import calendar, email, job_boards
+from .matching import find_duplicates
 
 DEFAULT_CHANNELS = ["Company Careers Page", "LinkedIn"]
 ONBOARDING_TEMPLATE = [
@@ -98,6 +99,10 @@ def publish_job(db: Session, job: Job, channels: list[str], actor: str) -> list[
 # ------------------------------------------------------------------ screening
 def screen_candidate(db: Session, job: Job, candidate: Candidate, actor: str) -> Candidate:
     result = decision.screen(job, candidate.resume_text)
+    duplicates = find_duplicates(db, candidate)
+    if duplicates:
+        duplicate_ids = [match["candidate_id"] for match in duplicates]
+        result.flags.append(f"Potential duplicate profile(s): {', '.join(map(str, duplicate_ids[:5]))}")
     candidate.parsed = result.parsed
     candidate.name = candidate.name or result.parsed["name"]
     candidate.email = candidate.email or result.parsed["email"]
@@ -125,6 +130,9 @@ def screen_candidate(db: Session, job: Job, candidate: Candidate, actor: str) ->
         category=result.category,
         confidence=result.confidence,
         summary_source=source,
+        prompt_version=llm.PROMPT_VERSION,
+        model=llm.model_name(),
+        duplicate_candidate_ids=[match["candidate_id"] for match in duplicates],
     )
     if result.category == decision.HUMAN_REVIEW:
         request_approval(
@@ -267,9 +275,20 @@ def propose_interview(
 
 def confirm_interview(db: Session, interview: Interview, actor: str, start_time: str | None = None) -> None:
     if start_time:
-        start = datetime.fromisoformat(start_time)
-        interview.end_time = start + (interview.end_time - interview.start_time)
-        interview.start_time = start
+        start = _parse_interview_start(start_time)
+        duration = interview.end_time - interview.start_time
+        end = start + duration
+        if start <= utcnow():
+            raise HTTPException(422, "Interview must be scheduled in the future")
+        if interview.interviewer_id and not calendar.is_available(
+            db, interview.interviewer_id, start, end, exclude_interview_id=interview.id
+        ):
+            raise HTTPException(409, "The selected interviewer is no longer available at that time")
+        interview.start_time, interview.end_time = start, end
+    elif interview.interviewer_id and not calendar.is_available(
+        db, interview.interviewer_id, interview.start_time, interview.end_time, exclude_interview_id=interview.id
+    ):
+        raise HTTPException(409, "The selected interviewer is no longer available at that time")
     interview.status = "scheduled"
     candidate = db.get(Candidate, interview.candidate_id)
     interviewer = db.get(Interviewer, interview.interviewer_id) if interview.interviewer_id else None
@@ -297,6 +316,70 @@ def confirm_interview(db: Session, interview: Interview, actor: str, start_time:
             candidate_id=candidate.id,
         )
     log(db, actor, "interview_scheduled", "interview", interview.id, start_time=interview.start_time.isoformat())
+
+
+def _parse_interview_start(value: str) -> datetime:
+    try:
+        start = datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise HTTPException(422, "start_time must be a valid ISO-8601 datetime") from exc
+    if start.tzinfo is not None:
+        start = start.astimezone(timezone.utc).replace(tzinfo=None)
+    return start
+
+
+def reschedule_interview(db: Session, interview: Interview, start_time: str, actor: str) -> None:
+    if interview.status != "scheduled" or not interview.start_time or not interview.end_time:
+        raise HTTPException(400, "Only scheduled interviews with a time can be rescheduled")
+    start = _parse_interview_start(start_time)
+    duration = interview.end_time - interview.start_time
+    end = start + duration
+    if start <= utcnow():
+        raise HTTPException(422, "Interview must be rescheduled to a future time")
+    if interview.interviewer_id and not calendar.is_available(
+        db, interview.interviewer_id, start, end, exclude_interview_id=interview.id
+    ):
+        raise HTTPException(409, "The selected interviewer is not available at that time")
+    interview.start_time, interview.end_time = start, end
+    candidate = db.get(Candidate, interview.candidate_id)
+    interviewer = db.get(Interviewer, interview.interviewer_id) if interview.interviewer_id else None
+    when = f"{start:%a %d %b %Y, %H:%M} UTC"
+    send_candidate_email(
+        db,
+        "interview_invite",
+        candidate.job,
+        candidate,
+        actor,
+        round_name=interview.round_name,
+        when=when,
+        interviewer=interviewer.name if interviewer else "TBD",
+    )
+    log(db, actor, "interview_rescheduled", "interview", interview.id, start_time=start.isoformat())
+
+
+def cancel_interview(db: Session, interview: Interview, actor: str, reason: str = "") -> None:
+    if interview.status not in {"proposed", "scheduled"}:
+        raise HTTPException(400, "Only proposed or scheduled interviews can be cancelled")
+    interview.status = "cancelled"
+    candidate = db.get(Candidate, interview.candidate_id)
+    remaining = db.scalars(
+        select(Interview).where(
+            Interview.candidate_id == candidate.id,
+            Interview.id != interview.id,
+            Interview.status.in_(["proposed", "scheduled"]),
+        )
+    ).first()
+    if not remaining and candidate.status == "interview_scheduled":
+        candidate.status = "shortlisted"
+    send_candidate_email(
+        db,
+        "interview_cancelled",
+        candidate.job,
+        candidate,
+        actor,
+        round_name=interview.round_name,
+    )
+    log(db, actor, "interview_cancelled", "interview", interview.id, reason=reason)
 
 
 def candidates_needing_interview(db: Session, job: Job) -> list[Candidate]:
@@ -467,13 +550,16 @@ def apply_strategy(db: Session, job: Job, strategy: dict, actor: str) -> None:
 
 
 # ------------------------------------------------------------------ communication
-def send_candidate_email(db: Session, kind: str, job: Job, candidate: Candidate, actor: str, **ctx) -> None:
+def send_candidate_email(db: Session, kind: str, job: Job, candidate: Candidate, actor: str, **ctx):
     if not candidate.email:
         log(db, actor, "email_skipped", "candidate", candidate.id, kind=kind, reason="no email")
         return
     msg, source = llm.draft_email(kind, job, candidate, **ctx)
-    email.send(db, candidate.email, msg["subject"], msg["body"], kind=kind, job_id=job.id, candidate_id=candidate.id)
-    log(db, actor, "email_sent", "candidate", candidate.id, kind=kind, source=source)
+    delivery = email.send(
+        db, candidate.email, msg["subject"], msg["body"], kind=kind, job_id=job.id, candidate_id=candidate.id
+    )
+    log(db, actor, f"email_{delivery.status}", "candidate", candidate.id, kind=kind, source=source)
+    return delivery
 
 
 # ------------------------------------------------------------------ approval decisions

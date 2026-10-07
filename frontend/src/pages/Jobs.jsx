@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api.js";
-import { Badge, ErrorBox } from "../components/ui.jsx";
+import { Badge, ErrorBox, LoadError } from "../components/ui.jsx";
 import { fmtMoney } from "../util.js";
 
 const EMPTY = {
@@ -112,11 +112,22 @@ export default function Jobs() {
   const [draft, setDraft] = useState({});
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const [loading, setLoading] = useState(true);
   const nav = useNavigate();
 
-  useEffect(() => {
-    api.get("/jobs").then(setJobs);
-  }, []);
+  const load = async () => {
+    setLoading(true);
+    try {
+      setJobs(await api.get("/jobs"));
+      setLoadError("");
+    } catch (e) {
+      setLoadError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => { load(); }, []);
 
   const runIntake = async () => {
     setError("");
@@ -168,6 +179,9 @@ export default function Jobs() {
           <JobForm initial={draft} onSubmit={create} submitLabel="Create requisition" />
         </div>
       )}
+      {loadError && <LoadError error={`Couldn’t load requisitions: ${loadError}`} onRetry={load} />}
+      {loading && <p role="status">Loading requisitions…</p>}
+      {!loading && !loadError && (
       <div className="card">
         <table className="table">
           <thead>
@@ -208,6 +222,7 @@ export default function Jobs() {
           </tbody>
         </table>
       </div>
+      )}
     </div>
   );
 }

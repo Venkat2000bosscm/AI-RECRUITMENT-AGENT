@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -30,6 +30,7 @@ class Interviewer(Base):
 
 class Job(Base):
     __tablename__ = "jobs"
+    __table_args__ = (Index("ix_jobs_status_created_at", "status", "created_at"),)
     id: Mapped[int] = mapped_column(primary_key=True)
     title: Mapped[str] = mapped_column(String(200))
     department: Mapped[str] = mapped_column(String(120), default="")
@@ -59,6 +60,10 @@ class Job(Base):
 
 class Candidate(Base):
     __tablename__ = "candidates"
+    __table_args__ = (
+        Index("ix_candidates_job_status_score", "job_id", "status", "score"),
+        Index("ix_candidates_email", "email"),
+    )
     id: Mapped[int] = mapped_column(primary_key=True)
     job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id"))
     name: Mapped[str] = mapped_column(String(200), default="")
@@ -92,6 +97,7 @@ class Candidate(Base):
 
 class Approval(Base):
     __tablename__ = "approvals"
+    __table_args__ = (Index("ix_approvals_status_created_at", "status", "created_at"),)
     id: Mapped[int] = mapped_column(primary_key=True)
     # jd_publication | strategy_change | shortlist | interview_schedule | hiring_decision |
     # offer | onboarding | human_review
@@ -111,6 +117,7 @@ class Approval(Base):
 
 class Interview(Base):
     __tablename__ = "interviews"
+    __table_args__ = (Index("ix_interviews_interviewer_status_time", "interviewer_id", "status", "start_time"),)
     id: Mapped[int] = mapped_column(primary_key=True)
     job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id"))
     candidate_id: Mapped[int] = mapped_column(ForeignKey("candidates.id"))
@@ -129,6 +136,7 @@ class Interview(Base):
 
 class Offer(Base):
     __tablename__ = "offers"
+    __table_args__ = (Index("ix_offers_job_status", "job_id", "status"),)
     id: Mapped[int] = mapped_column(primary_key=True)
     job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id"))
     candidate_id: Mapped[int] = mapped_column(ForeignKey("candidates.id"))
@@ -169,6 +177,7 @@ class EmailMessage(Base):
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"
+    __table_args__ = (Index("ix_audit_entity", "entity_type", "entity_id", "ts"),)
     id: Mapped[int] = mapped_column(primary_key=True)
     ts: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     actor: Mapped[str] = mapped_column(String(120))

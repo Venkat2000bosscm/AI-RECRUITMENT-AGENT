@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -14,7 +14,13 @@ router = APIRouter(prefix="/api/approvals", tags=["approvals"])
 
 @router.get("", response_model=list[ApprovalOut])
 def list_approvals(
-    status: str | None = "pending", job_id: int | None = None, candidate_id: int | None = None, db: Session = Depends(get_db)
+    status: str | None = "pending",
+    job_id: int | None = None,
+    candidate_id: int | None = None,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
 ):
     q = select(Approval).order_by(Approval.created_at.desc())
     if status and status != "all":
@@ -23,7 +29,7 @@ def list_approvals(
         q = q.where(Approval.job_id == job_id)
     if candidate_id:
         q = q.where(Approval.candidate_id == candidate_id)
-    return db.scalars(q).all()
+    return db.scalars(q.offset(offset).limit(limit)).all()
 
 
 @router.post("/{approval_id}/decide", response_model=ApprovalOut)

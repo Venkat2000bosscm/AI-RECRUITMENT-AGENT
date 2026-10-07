@@ -1,11 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..deps import current_user
 from ..models import Candidate, Interview, Interviewer, Job, User
-from ..schemas import FeedbackRequest, InterviewerOut, InterviewOut
+from ..schemas import (
+    FeedbackRequest,
+    InterviewCancelRequest,
+    InterviewerOut,
+    InterviewOut,
+    InterviewRescheduleRequest,
+)
 from ..services import guardrails, llm, recruitment
 from ..services.audit import log
 
@@ -30,21 +36,55 @@ def get_interview(db: Session, interview_id: int) -> Interview:
 
 
 @router.get("/interviewers", response_model=list[InterviewerOut])
-def interviewers(db: Session = Depends(get_db)):
+def interviewers(db: Session = Depends(get_db), user: User = Depends(current_user)):
     return db.scalars(select(Interviewer)).all()
 
 
 @router.get("/interviews", response_model=list[InterviewOut])
-def list_interviews(status: str | None = None, db: Session = Depends(get_db)):
+def list_interviews(
+    status: str | None = None,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
     q = select(Interview).order_by(Interview.start_time)
     if status:
         q = q.where(Interview.status == status)
-    return [interview_out(db, i) for i in db.scalars(q).all()]
+    return [interview_out(db, i) for i in db.scalars(q.offset(offset).limit(limit)).all()]
 
 
 @router.get("/interviews/{interview_id}", response_model=InterviewOut)
-def read_interview(interview_id: int, db: Session = Depends(get_db)):
+def read_interview(interview_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
     return interview_out(db, get_interview(db, interview_id))
+
+
+@router.post("/interviews/{interview_id}/reschedule", response_model=InterviewOut)
+def reschedule(
+    interview_id: int,
+    req: InterviewRescheduleRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    guardrails.ensure_permission(user, "schedule_interview")
+    interview = get_interview(db, interview_id)
+    recruitment.reschedule_interview(db, interview, req.start_time, user.name)
+    db.commit()
+    return interview_out(db, interview)
+
+
+@router.post("/interviews/{interview_id}/cancel", response_model=InterviewOut)
+def cancel(
+    interview_id: int,
+    req: InterviewCancelRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    guardrails.ensure_permission(user, "schedule_interview")
+    interview = get_interview(db, interview_id)
+    recruitment.cancel_interview(db, interview, user.name, req.reason)
+    db.commit()
+    return interview_out(db, interview)
 
 
 @router.post("/interviews/{interview_id}/feedback", response_model=InterviewOut)

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api.js";
 import ApprovalCard from "../components/ApprovalCard.jsx";
-import { Badge, Chips, ErrorBox, Score } from "../components/ui.jsx";
+import { Badge, Chips, ErrorBox, LoadError, Score } from "../components/ui.jsx";
 import { CATEGORY_LABEL, effectiveCategory, fmtDate, fmtMoney, pretty } from "../util.js";
 
 function FeedbackForm({ interview, onDone }) {
@@ -48,6 +48,10 @@ function FeedbackForm({ interview, onDone }) {
         Concerns
         <input value={f.concerns} onChange={set("concerns")} />
       </label>
+      <label>
+        Notes
+        <textarea rows={3} value={f.notes} onChange={set("notes")} placeholder="Additional observations or context" />
+      </label>
       <ErrorBox error={error} />
       <button className="btn primary">Submit feedback</button>
     </form>
@@ -68,31 +72,49 @@ export default function CandidateDetail({ onChange }) {
   const [error, setError] = useState("");
   const [showResume, setShowResume] = useState(false);
 
-  const load = () => {
-    api.get(`/candidates/${id}`).then(setC);
-    api.get(`/candidates/${id}/interviews`).then(setInterviews);
-    api.get(`/approvals?status=all&candidate_id=${id}`).then(setApprovals);
-    api.get(`/offers?candidate_id=${id}`).then(setOffers);
-    api.get(`/candidates/${id}/onboarding`).then(setTasks);
-    api.get(`/emails?candidate_id=${id}`).then(setEmails);
-    onChange?.();
+  const load = async () => {
+    try {
+      const [candidate, interviewData, approvalData, offerData, onboardingData, emailData, interviewerData] = await Promise.all([
+        api.get(`/candidates/${id}`),
+        api.get(`/candidates/${id}/interviews`),
+        api.get(`/approvals?status=all&candidate_id=${id}`),
+        api.get(`/offers?candidate_id=${id}`),
+        api.get(`/candidates/${id}/onboarding`),
+        api.get(`/emails?candidate_id=${id}`),
+        api.get("/interviewers"),
+      ]);
+      setC(candidate);
+      setInterviews(interviewData);
+      setApprovals(approvalData);
+      setOffers(offerData);
+      setTasks(onboardingData);
+      setEmails(emailData);
+      setInterviewers(interviewerData);
+      setError("");
+      onChange?.();
+    } catch (e) {
+      setError(e.message);
+      throw e;
+    }
   };
   useEffect(() => {
-    load();
-    api.get("/interviewers").then(setInterviewers);
+    setC(null);
+    setError("");
+    load().catch(() => {});
   }, [id]);
 
   const act = async (fn) => {
     setError("");
     try {
       await fn();
-      load();
+      await load();
     } catch (e) {
       setError(e.message);
     }
   };
 
-  if (!c) return <p>Loading…</p>;
+  if (!c && error) return <LoadError error={`Couldn’t load this candidate: ${error}`} onRetry={() => load().catch(() => {})} />;
+  if (!c) return <p role="status">Loading candidate…</p>;
   const b = c.score_breakdown || {};
 
   return (
@@ -132,17 +154,23 @@ export default function CandidateDetail({ onChange }) {
             </div>
           </div>
           <h4>Score breakdown</h4>
+          <p className="small muted">Each factor is a normalized match score; the weight shows how much that factor contributes to the screening score. These are review signals, not a hiring decision.</p>
           {["required_skills", "preferred_skills", "experience", "similarity"].map(
             (k) =>
               b[k] != null && (
                 <div key={k} className="bar-row">
                   <span className="bar-label">
-                    {pretty(k)} <span className="muted">×{b.weights?.[k]}</span>
+                    {pretty(k)} <span className="muted">{b.weights?.[k] != null ? `×${b.weights[k]} weight` : ""}</span>
                   </span>
                   <div className="bar">
-                    <div className="fill c-pipeline" style={{ width: `${b[k] * 100}%` }} />
+                    <div
+                      className="fill c-pipeline"
+                      role="img"
+                      aria-label={`${pretty(k)} match strength: ${Math.round(b[k] * 100)}%`}
+                      style={{ width: `${Math.min(100, Math.max(0, b[k] * 100))}%` }}
+                    />
                   </div>
-                  <span className="bar-val">{Math.round(b[k] * 100)}</span>
+                  <span className="bar-val">{Math.round(b[k] * 100)}%</span>
                 </div>
               )
           )}

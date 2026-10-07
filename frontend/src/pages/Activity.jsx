@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
-import { Badge, Tabs } from "../components/ui.jsx";
+import { Badge, LoadError, Tabs } from "../components/ui.jsx";
 import { fmtDate } from "../util.js";
 
 export default function Activity() {
@@ -8,10 +8,25 @@ export default function Activity() {
   const [audit, setAudit] = useState([]);
   const [emails, setEmails] = useState([]);
   const [actor, setActor] = useState("");
-  useEffect(() => {
-    api.get(`/audit?limit=300${actor ? `&actor=${encodeURIComponent(actor)}` : ""}`).then(setAudit);
-    api.get("/emails").then(setEmails);
-  }, [actor]);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const load = async () => {
+    setLoading(true);
+    try {
+      const [auditRows, emailRows] = await Promise.all([
+        api.get(`/audit?limit=300${actor ? `&actor=${encodeURIComponent(actor)}` : ""}`),
+        api.get("/emails"),
+      ]);
+      setAudit(auditRows);
+      setEmails(emailRows);
+      setError("");
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => { load(); }, [actor]);
   return (
     <div>
       <h1>Audit log & outbox</h1>
@@ -23,6 +38,9 @@ export default function Activity() {
           { id: "emails", label: "Email outbox", count: emails.length },
         ]}
       />
+      {error && <LoadError error={`Couldn’t load activity: ${error}`} onRetry={load} />}
+      {loading && <p role="status">Loading activity…</p>}
+      {!loading && !error && <>
       {tab === "audit" && (
         <div className="card">
           <div className="row">
@@ -72,6 +90,7 @@ export default function Activity() {
           {emails.length === 0 && <p className="muted">No emails yet.</p>}
         </div>
       )}
+      </>}
     </div>
   );
 }

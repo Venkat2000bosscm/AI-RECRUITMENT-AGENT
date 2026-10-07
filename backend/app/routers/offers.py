@@ -19,7 +19,7 @@ def offer_out(db: Session, o: Offer) -> OfferOut:
 
 
 @router.get("", response_model=list[OfferOut])
-def list_offers(candidate_id: int | None = None, db: Session = Depends(get_db)):
+def list_offers(candidate_id: int | None = None, db: Session = Depends(get_db), user: User = Depends(current_user)):
     q = select(Offer).order_by(Offer.created_at.desc())
     if candidate_id:
         q = q.where(Offer.candidate_id == candidate_id)

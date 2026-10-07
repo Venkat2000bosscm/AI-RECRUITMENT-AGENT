@@ -2,9 +2,9 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: recruit
-      POSTGRES_PASSWORD: recruit
-      POSTGRES_DB: recruit
+      POSTGRES_USER: ${POSTGRES_USER:-recruit}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-recruit}
     volumes: [pgdata:/var/lib/postgresql/data]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U recruit"]
@@ -15,7 +15,7 @@ services:
     build: ./backend
     env_file: [.env]
     environment:
-      DATABASE_URL: postgresql+psycopg://recruit:recruit@db:5432/recruit
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-recruit}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/${POSTGRES_DB:-recruit}
       UPLOAD_DIR: /data/uploads
     volumes: [uploads:/data/uploads]
     depends_on:

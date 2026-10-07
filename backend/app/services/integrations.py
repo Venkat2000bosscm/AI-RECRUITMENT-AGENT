@@ -4,15 +4,19 @@ The MVP ships local connectors so the full workflow runs without vendor credenti
 connectors (Greenhouse, Lever, Workday, Google/Outlook calendar, etc.) implement the same interfaces.
 """
 
+import logging
 import smtplib
 from datetime import datetime, timedelta
 from email.message import EmailMessage as MIMEMessage
+from email.utils import parseaddr
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..config import settings
-from ..models import EmailMessage, Interview, Interviewer, Job
+from ..models import EmailMessage, Interview, Interviewer, Job, utcnow
+
+logger = logging.getLogger(__name__)
 
 
 class JobBoardConnector:
@@ -27,10 +31,14 @@ class EmailConnector:
         self, db: Session, to: str, subject: str, body: str, kind: str = "general", job_id=None, candidate_id=None
     ) -> EmailMessage:
         msg = EmailMessage(to=to, subject=subject, body=body, kind=kind, job_id=job_id, candidate_id=candidate_id)
-        if settings.smtp_host and to:
+        parsed_to = parseaddr(to)[1]
+        if not parsed_to or "@" not in parsed_to or parsed_to.startswith("@") or parsed_to.endswith("@"):
+            msg.status = "failed"
+            logger.warning("Email was not queued because the recipient address is invalid (candidate_id=%s)", candidate_id)
+        elif settings.smtp_host:
             try:
                 mime = MIMEMessage()
-                mime["From"], mime["To"], mime["Subject"] = settings.smtp_from, to, subject
+                mime["From"], mime["To"], mime["Subject"] = settings.smtp_from, parsed_to, subject
                 mime.set_content(body)
                 with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15) as smtp:
                     smtp.starttls()
@@ -38,16 +46,35 @@ class EmailConnector:
                         smtp.login(settings.smtp_user, settings.smtp_password or "")
                     smtp.send_message(mime)
                 msg.status = "sent"
-            except Exception:  # noqa: BLE001 - recorded on the message for HR follow-up
+            except Exception:
                 msg.status = "failed"
+                logger.exception("Email delivery failed (kind=%s, candidate_id=%s)", kind, candidate_id)
         else:
-            msg.status = "sent"  # local outbox delivery
+            msg.status = "queued"
         db.add(msg)
         return msg
 
 
 class CalendarConnector:
     """Finds free interview slots from interviewer working hours and existing interviews."""
+
+    def is_available(
+        self,
+        db: Session,
+        interviewer_id: int,
+        start: datetime,
+        end: datetime,
+        exclude_interview_id: int | None = None,
+    ) -> bool:
+        query = select(Interview.id).where(
+            Interview.interviewer_id == interviewer_id,
+            Interview.status.in_(["proposed", "scheduled"]),
+            Interview.start_time < end,
+            Interview.end_time > start,
+        )
+        if exclude_interview_id is not None:
+            query = query.where(Interview.id != exclude_interview_id)
+        return db.scalar(query.limit(1)) is None
 
     def busy_slots(self, db: Session, interviewer_id: int) -> list[tuple[datetime, datetime]]:
         rows = db.scalars(
@@ -59,7 +86,7 @@ class CalendarConnector:
         self, db: Session, interviewer: Interviewer, count: int = 3, duration_minutes: int = 60, start: datetime | None = None
     ) -> list[tuple[datetime, datetime]]:
         busy = self.busy_slots(db, interviewer.id)
-        day = (start or datetime.utcnow()).replace(minute=0, second=0, microsecond=0) + timedelta(days=1)
+        day = (start or utcnow()).replace(minute=0, second=0, microsecond=0) + timedelta(days=1)
         slots: list[tuple[datetime, datetime]] = []
         for _ in range(21):
             if day.weekday() < 5:

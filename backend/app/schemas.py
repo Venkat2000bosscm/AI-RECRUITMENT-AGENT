@@ -15,12 +15,12 @@ class UserOut(ORM):
 
 
 class JobBase(BaseModel):
-    title: str
-    department: str = ""
-    location: str = ""
-    work_mode: str = "hybrid"
-    experience_min: int = 0
-    experience_max: int = 0
+    title: str = Field(min_length=2, max_length=200)
+    department: str = Field(default="", max_length=120)
+    location: str = Field(default="", max_length=120)
+    work_mode: str = Field(default="hybrid", pattern="^(remote|hybrid|onsite)$")
+    experience_min: int = Field(default=0, ge=0, le=60)
+    experience_max: int = Field(default=0, ge=0, le=60)
     required_skills: list[str] = []
     preferred_skills: list[str] = []
     qualifications: str = ""
@@ -68,14 +68,14 @@ class JobOut(JobBase, ORM):
 
 
 class IntakeRequest(BaseModel):
-    text: str
+    text: str = Field(min_length=3, max_length=20000)
 
 
 class CandidateCreate(BaseModel):
-    resume_text: str
-    name: str = ""
-    email: str = ""
-    source: str = "manual"
+    resume_text: str = Field(min_length=1, max_length=1_000_000)
+    name: str = Field(default="", max_length=200)
+    email: str = Field(default="", max_length=320)
+    source: str = Field(default="manual", max_length=60)
 
 
 class CandidateOut(ORM):
@@ -98,6 +98,13 @@ class CandidateOut(ORM):
     status: str
     created_at: datetime
     screened_at: datetime | None
+
+
+class CandidateSearchPage(BaseModel):
+    items: list[CandidateOut]
+    total: int
+    page: int
+    page_size: int
 
 
 class CandidateDetail(CandidateOut):
@@ -173,10 +180,18 @@ class FeedbackRequest(BaseModel):
     notes: str = ""
 
 
+class InterviewRescheduleRequest(BaseModel):
+    start_time: str = Field(min_length=10, max_length=40)
+
+
+class InterviewCancelRequest(BaseModel):
+    reason: str = Field(default="", max_length=500)
+
+
 class OfferDraftRequest(BaseModel):
-    salary: float | None = None
-    start_date: str = ""
-    extra_terms: str = ""
+    salary: float | None = Field(default=None, ge=0)
+    start_date: str = Field(default="", max_length=20)
+    extra_terms: str = Field(default="", max_length=2000)
 
 
 class OfferOut(ORM):
@@ -242,9 +257,27 @@ class AgentRunOut(ORM):
 
 
 class EmailRequest(BaseModel):
-    kind: str = "general"
-    message: str = ""
+    kind: str = Field(
+        default="general",
+        pattern="^(general|acknowledgement|interview_invite|interview_cancelled|rejection|offer|offer_follow_up)$",
+    )
+    message: str = Field(default="", max_length=5000)
 
 
 class PauseRequest(BaseModel):
     paused: bool
+
+
+class PipelineStage(BaseModel):
+    key: str = Field(pattern="^[a-z][a-z0-9_]{1,39}$")
+    label: str = Field(min_length=1, max_length=60)
+    color: str = Field(pattern="^#[0-9a-fA-F]{6}$")
+
+
+class PipelineStagesRequest(BaseModel):
+    stages: list[PipelineStage] = Field(min_length=1, max_length=20)
+
+
+class CopilotRequest(BaseModel):
+    question: str = Field(min_length=3, max_length=2000)
+    job_id: int | None = Field(default=None, ge=1)

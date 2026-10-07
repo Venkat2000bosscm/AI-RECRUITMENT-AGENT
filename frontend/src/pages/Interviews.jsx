@@ -1,17 +1,31 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api.js";
-import { Badge } from "../components/ui.jsx";
+import { Badge, LoadError } from "../components/ui.jsx";
 import { fmtDate } from "../util.js";
 
 export default function Interviews() {
   const [items, setItems] = useState([]);
-  useEffect(() => {
-    api.get("/interviews").then(setItems);
-  }, []);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const load = async () => {
+    setLoading(true);
+    try {
+      setItems(await api.get("/interviews"));
+      setError("");
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => { load(); }, []);
   return (
     <div>
       <h1>Interviews</h1>
+      {error && <LoadError error={`Couldn’t load interviews: ${error}`} onRetry={load} />}
+      {loading && <p role="status">Loading interviews…</p>}
+      {!loading && !error && <>
       <div className="card">
         <table className="table">
           <thead>
@@ -45,6 +59,7 @@ export default function Interviews() {
         </table>
         {items.length === 0 && <p className="muted">No interviews yet. Approve a shortlist and the agent will propose interview slots.</p>}
       </div>
+      </>}
     </div>
   );
 }

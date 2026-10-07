@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { api } from "../api.js";
 import AgentTimeline from "../components/AgentTimeline.jsx";
 import ApprovalCard from "../components/ApprovalCard.jsx";
-import { Badge, Chips, ErrorBox, Markdown, Score, Tabs } from "../components/ui.jsx";
+import { Badge, Chips, ErrorBox, LoadError, Markdown, Score, Tabs } from "../components/ui.jsx";
 import { effectiveCategory, fmtMoney } from "../util.js";
 import { JobForm } from "./Jobs.jsx";
 
@@ -22,21 +22,37 @@ export default function JobDetail({ onChange }) {
   const [filter, setFilter] = useState("all");
   const fileRef = useRef();
 
-  const load = () => {
-    api.get(`/jobs/${id}`).then(setJob);
-    api.get(`/jobs/${id}/candidates`).then(setCandidates);
-    api.get(`/approvals?status=all&job_id=${id}`).then(setApprovals);
-    api.get(`/jobs/${id}/agent/runs`).then(setRuns);
-    onChange?.();
+  const load = async () => {
+    try {
+      const [jobData, candidateData, approvalData, runData] = await Promise.all([
+        api.get(`/jobs/${id}`),
+        api.get(`/jobs/${id}/candidates`),
+        api.get(`/approvals?status=all&job_id=${id}`),
+        api.get(`/jobs/${id}/agent/runs`),
+      ]);
+      setJob(jobData);
+      setCandidates(candidateData);
+      setApprovals(approvalData);
+      setRuns(runData);
+      setError("");
+      onChange?.();
+    } catch (e) {
+      setError(e.message);
+      throw e;
+    }
   };
-  useEffect(load, [id]);
+  useEffect(() => {
+    setJob(null);
+    setError("");
+    load().catch(() => {});
+  }, [id]);
 
   const act = async (label, fn) => {
     setBusy(label);
     setError("");
     try {
       await fn();
-      load();
+      await load();
     } catch (e) {
       setError(e.message);
     } finally {
@@ -44,7 +60,8 @@ export default function JobDetail({ onChange }) {
     }
   };
 
-  if (!job) return <p>Loading…</p>;
+  if (!job && error) return <LoadError error={`Couldn’t load this requisition: ${error}`} onRetry={() => load().catch(() => {})} />;
+  if (!job) return <p role="status">Loading requisition…</p>;
   const pendingApprovals = approvals.filter((a) => a.status === "pending");
   const shown = candidates.filter((c) => filter === "all" || effectiveCategory(c) === filter || c.status === filter);
 

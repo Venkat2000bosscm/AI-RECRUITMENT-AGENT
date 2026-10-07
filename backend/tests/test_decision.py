@@ -41,6 +41,8 @@ def test_screen_strong_and_weak():
     weak = decision.screen(job, "John\njohn@x.com\nSales executive with 6 years of experience in retail account management. " * 4)
     assert weak.category == decision.WEAK
     assert set(weak.missing_skills) == {"Python", "FastAPI", "PostgreSQL"}
+    assert abs(sum(strong.breakdown["weights"].values()) - 1) < 1e-9
+    assert set(strong.breakdown["contributions"]) == set(strong.breakdown["weights"])
 
 
 def test_low_confidence_routes_to_human_review():

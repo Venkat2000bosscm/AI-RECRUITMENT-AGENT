@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..agent.workflow import run_agent
@@ -43,8 +43,24 @@ def _check_criteria(payload: dict) -> None:
 
 
 @router.get("", response_model=list[JobOut])
-def list_jobs(db: Session = Depends(get_db)):
-    return [job_out(j) for j in db.scalars(select(Job).order_by(Job.created_at.desc())).all()]
+def list_jobs(
+    q: str | None = Query(None, max_length=120),
+    status: str | None = Query(None, max_length=40),
+    location: str | None = Query(None, max_length=120),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    query = select(Job)
+    if q and q.strip():
+        query = query.where(func.lower(Job.title).contains(q.strip().lower()))
+    if status:
+        query = query.where(Job.status == status)
+    if location:
+        query = query.where(func.lower(Job.location).contains(location.strip().lower()))
+    jobs = db.scalars(query.order_by(Job.created_at.desc(), Job.id).offset(offset).limit(limit)).all()
+    return [job_out(job) for job in jobs]
 
 
 @router.post("/intake")
@@ -67,7 +83,7 @@ def create_job(req: JobCreate, db: Session = Depends(get_db), user: User = Depen
 
 
 @router.get("/{job_id}", response_model=JobOut)
-def read_job(job_id: int, db: Session = Depends(get_db)):
+def read_job(job_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
     return job_out(get_job(db, job_id))
 
 
@@ -138,5 +154,5 @@ def run(job_id: int, db: Session = Depends(get_db), user: User = Depends(current
 
 
 @router.get("/{job_id}/agent/runs", response_model=list[AgentRunOut])
-def runs(job_id: int, db: Session = Depends(get_db)):
+def runs(job_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
     return db.scalars(select(AgentRun).where(AgentRun.job_id == job_id).order_by(AgentRun.id.desc()).limit(20)).all()
