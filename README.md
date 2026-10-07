@@ -112,23 +112,29 @@ GitHub Actions runs backend tests/lint and the frontend production build on push
 
 ## Azure DevOps deployment
 
-The repository includes [`azure-pipelines.yml`](./azure-pipelines.yml). It runs backend lint/tests, builds the frontend, and verifies both Docker images build. It does not push images or deploy Azure resources: choose and provision the Azure target, service connections, environments, and secrets before adding a release stage.
+The repository includes [`azure-pipelines.yml`](./azure-pipelines.yml). Every push to `main` triggers backend lint/tests and the frontend build; after those pass, the pipeline builds and pushes both container images to ACR. Pull requests targeting `main` run validation but do not push images. It does not deploy/update Azure Container Apps.
 
 ### Recommended Azure layout
 
-For the current two-container design, a practical Azure target is Azure Container Apps for the API and UI, Azure Container Registry (ACR) for images, Azure Database for PostgreSQL Flexible Server for application data, and Azure Key Vault for secrets. Keep the API ingress internal and expose the UI; the UI's Nginx reverse proxy forwards `/api/` to the API. Set the UI container's `BACKEND_URL` to the API's internal Container Apps ingress URL (for example, `http://<api-internal-fqdn>`). Docker Compose defaults it to `http://backend:8000`.
+For this deployment target, run the React/Nginx frontend as a Linux custom container in Azure App Service (Web App for Containers), and run FastAPI as an always-on Azure Container Apps app. **Do not use a Container Apps Job for the API**: jobs run finite tasks to completion, while this API must stay running and answer HTTP requests. Container Apps Jobs could be added later for separate batch or scheduled work.
+
+Use Azure Container Registry (ACR) for both images, Azure Database for PostgreSQL Flexible Server for persistent application data, and Azure Key Vault for secrets. The frontend Nginx proxy forwards `/api/` to the backend, so configure the Web App's `BACKEND_URL` application setting to the backend's Container Apps endpoint. App Service cannot resolve a Container Apps environment's internal-only endpoint by default; either configure networking so the Web App can reach a private backend, or use a publicly reachable backend endpoint with appropriate authentication and access controls. The current demo identity is not adequate protection for real candidate data.
+
+The pipeline currently tests the code and pushes `recruitment-api` and `recruitment-ui` images to ACR on `main`; it does **not** deploy them to App Service or Container Apps. After image publishing, configure each Azure service to pull the corresponding image, or add a deployment stage once the Azure service connection, Web App name, Container App name, resource group, and network design are known. Docker Compose defaults `BACKEND_URL` to `http://backend:8000` for local container use.
 
 Use a separate, controlled release step/job to run `alembic upgrade head` against the target database before shifting traffic to a new backend image. Do not run migrations on every web-app startup when multiple replicas may start concurrently. Keep uploaded resumes in durable, access-controlled storage rather than a container's writable layer.
 
 ### Setup sequence
 
 1. Push this repository to Azure Repos or connect the Azure DevOps project to the source repository. Create a pipeline from the repository and select `azure-pipelines.yml`. For Azure Repos Git, configure a branch build-validation policy for `main`; the YAML `pr` trigger alone does not provide Azure Repos PR validation.
-2. Create an Azure Resource Manager service connection using workload identity federation where supported. Scope it to the deployment resource group and grant only the permissions needed for the pipeline. Do not put Azure credentials, database URLs, model keys, or SMTP passwords in YAML or source control.
-3. Provision the target resources and networking separately. Store runtime secrets in Key Vault and inject them into the container app as secrets/references. Use managed identity for Azure resource access where supported; restrict PostgreSQL to the application network and require TLS.
-4. Add a protected deployment environment and approval checks in Azure DevOps. Add a release stage that builds/pushes versioned images to ACR, runs the migration step, deploys backend then frontend, and verifies `/api/health/ready` plus the UI URL. Keep the prior image tag available for rollback.
-5. Keep the application in demo mode only for an isolated demo environment. **Do not deploy this application for real candidate data yet:** `X-User-Id` is demo identity, and setting `DEMO_MODE=false` fails closed because a real identity provider is not implemented. Production also needs tenant isolation, private candidate-file storage/retention controls, and operational monitoring.
+2. Create an Azure Container Registry (ACR) and an Azure Container Registry/Docker Registry service connection in Azure DevOps. Give the service connection identity `AcrPush` on only that registry, and authorize this pipeline to use it.
+3. Define the Azure DevOps pipeline variable `ACR_SERVICE_CONNECTION` as the exact name of that service connection. The pipeline publishes `recruitment-api` and `recruitment-ui`, each tagged with `$(Build.BuildId)` and `latest`. Do not store registry passwords in YAML.
+4. Create an Azure Resource Manager service connection using workload identity federation where supported for the later deployment stage. Scope it to the deployment resource group and grant only the permissions needed. Do not put Azure credentials, database URLs, model keys, or SMTP passwords in YAML or source control.
+5. Provision the target resources and networking separately. Store runtime secrets in Key Vault and inject them into the container app as secrets/references. Use managed identity for Azure resource access where supported; restrict PostgreSQL to the application network and require TLS.
+6. Add a protected deployment environment and approval checks in Azure DevOps. Add a release stage that runs the migration step, deploys backend then frontend, and verifies `/api/health/ready` plus the UI URL. Keep the prior image tag available for rollback.
+7. Keep the application in demo mode only for an isolated demo environment. **Do not deploy this application for real candidate data yet:** `X-User-Id` is demo identity, and setting `DEMO_MODE=false` fails closed because a real identity provider is not implemented. Production also needs tenant isolation, private candidate-file storage/retention controls, and operational monitoring.
 
-See [the architecture/readiness guide](./docs/architecture.md) for the current integration and production limitations. This pipeline intentionally stops at CI and image-build validation until the target subscription, deployment resource names, and release approvals are chosen.
+See [the architecture/readiness guide](./docs/architecture.md) for the current integration and production limitations. The pipeline pushes images but intentionally stops before deployment until the target subscription, resource names, and release approvals are chosen.
 
 ## Database migrations
 
