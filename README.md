@@ -110,6 +110,26 @@ npm run build
 
 GitHub Actions runs backend tests/lint and the frontend production build on pushes and pull requests.
 
+## Azure DevOps deployment
+
+The repository includes [`azure-pipelines.yml`](./azure-pipelines.yml). It runs backend lint/tests, builds the frontend, and verifies both Docker images build. It does not push images or deploy Azure resources: choose and provision the Azure target, service connections, environments, and secrets before adding a release stage.
+
+### Recommended Azure layout
+
+For the current two-container design, a practical Azure target is Azure Container Apps for the API and UI, Azure Container Registry (ACR) for images, Azure Database for PostgreSQL Flexible Server for application data, and Azure Key Vault for secrets. Keep the API ingress internal and expose the UI; the UI's Nginx reverse proxy forwards `/api/` to the API. Set the UI container's `BACKEND_URL` to the API's internal Container Apps ingress URL (for example, `http://<api-internal-fqdn>`). Docker Compose defaults it to `http://backend:8000`.
+
+Use a separate, controlled release step/job to run `alembic upgrade head` against the target database before shifting traffic to a new backend image. Do not run migrations on every web-app startup when multiple replicas may start concurrently. Keep uploaded resumes in durable, access-controlled storage rather than a container's writable layer.
+
+### Setup sequence
+
+1. Push this repository to Azure Repos or connect the Azure DevOps project to the source repository. Create a pipeline from the repository and select `azure-pipelines.yml`. For Azure Repos Git, configure a branch build-validation policy for `main`; the YAML `pr` trigger alone does not provide Azure Repos PR validation.
+2. Create an Azure Resource Manager service connection using workload identity federation where supported. Scope it to the deployment resource group and grant only the permissions needed for the pipeline. Do not put Azure credentials, database URLs, model keys, or SMTP passwords in YAML or source control.
+3. Provision the target resources and networking separately. Store runtime secrets in Key Vault and inject them into the container app as secrets/references. Use managed identity for Azure resource access where supported; restrict PostgreSQL to the application network and require TLS.
+4. Add a protected deployment environment and approval checks in Azure DevOps. Add a release stage that builds/pushes versioned images to ACR, runs the migration step, deploys backend then frontend, and verifies `/api/health/ready` plus the UI URL. Keep the prior image tag available for rollback.
+5. Keep the application in demo mode only for an isolated demo environment. **Do not deploy this application for real candidate data yet:** `X-User-Id` is demo identity, and setting `DEMO_MODE=false` fails closed because a real identity provider is not implemented. Production also needs tenant isolation, private candidate-file storage/retention controls, and operational monitoring.
+
+See [the architecture/readiness guide](./docs/architecture.md) for the current integration and production limitations. This pipeline intentionally stops at CI and image-build validation until the target subscription, deployment resource names, and release approvals are chosen.
+
 ## Database migrations
 
 Fresh production databases are created with Alembic:
